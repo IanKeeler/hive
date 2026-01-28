@@ -154,7 +154,7 @@ echo ""
 cd "$PROJECT_ROOT"
 
 # Test framework import
-if $PYTHON_CMD -c "import framework; print('framework OK')" > /dev/null 2>&1; then
+if $PYTHON_CMD -c 'import framework; print("framework OK")' > /dev/null 2>&1; then
     echo -e "${GREEN}✓${NC} framework package imports successfully"
 else
     echo -e "${RED}✗${NC} framework package import failed"
@@ -162,7 +162,7 @@ else
 fi
 
 # Test aden_tools import
-if $PYTHON_CMD -c "import aden_tools; print('aden_tools OK')" > /dev/null 2>&1; then
+if $PYTHON_CMD -c 'import aden_tools; print("aden_tools OK")' > /dev/null 2>&1; then
     echo -e "${GREEN}✓${NC} aden_tools package imports successfully"
 else
     echo -e "${RED}✗${NC} aden_tools package import failed"
@@ -170,7 +170,7 @@ else
 fi
 
 # Test litellm + openai compatibility
-if $PYTHON_CMD -c "import litellm; print('litellm OK')" > /dev/null 2>&1; then
+if $PYTHON_CMD -c 'import litellm; print("litellm OK")' > /dev/null 2>&1; then
     echo -e "${GREEN}✓${NC} litellm package imports successfully"
 else
     echo -e "${YELLOW}⚠${NC} litellm import had issues (may be OK if not using LLM features)"
