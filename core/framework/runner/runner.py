@@ -88,6 +88,7 @@ def load_agent_export(data: str | dict) -> tuple[GraphSpec, Goal]:
             "on_success": EdgeCondition.ON_SUCCESS,
             "on_failure": EdgeCondition.ON_FAILURE,
             "conditional": EdgeCondition.CONDITIONAL,
+            "llm_decide": EdgeCondition.LLM_DECIDE,
         }
         edge = EdgeSpec(
             id=edge_data["id"],
@@ -417,9 +418,14 @@ class AgentRunner:
             session_id=session_id,
         )
 
-        # Create LLM provider (if not mock mode and API key available)
+        # Create LLM provider
         # Uses LiteLLM which auto-detects the provider from model name
-        if not self.mock_mode:
+        if self.mock_mode:
+            # Use mock LLM for testing without real API calls
+            from framework.llm.mock import MockLLMProvider
+
+            self._llm = MockLLMProvider(model=self.model)
+        else:
             # Detect required API key from model name
             api_key_env = self._get_api_key_env_var(self.model)
             if api_key_env and os.environ.get(api_key_env):

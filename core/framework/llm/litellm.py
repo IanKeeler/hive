@@ -14,7 +14,7 @@ from typing import Any
 try:
     import litellm
 except ImportError:
-    litellm = None
+    litellm = None  # type: ignore[assignment]
 
 from framework.llm.provider import LLMProvider, LLMResponse, Tool, ToolResult, ToolUse
 
@@ -27,6 +27,7 @@ class LiteLLMProvider(LLMProvider):
     - OpenAI: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo
     - Anthropic: claude-3-opus, claude-3-sonnet, claude-3-haiku
     - Google: gemini-pro, gemini-1.5-pro, gemini-1.5-flash
+    - DeepSeek: deepseek-chat, deepseek-coder, deepseek-reasoner
     - Mistral: mistral-large, mistral-medium, mistral-small
     - Groq: llama3-70b, mixtral-8x7b
     - Local: ollama/llama3, ollama/mistral
@@ -41,6 +42,9 @@ class LiteLLMProvider(LLMProvider):
 
         # Google Gemini
         provider = LiteLLMProvider(model="gemini/gemini-1.5-flash")
+
+        # DeepSeek
+        provider = LiteLLMProvider(model="deepseek/deepseek-chat")
 
         # Local Ollama
         provider = LiteLLMProvider(model="ollama/llama3")
@@ -129,7 +133,7 @@ class LiteLLMProvider(LLMProvider):
             kwargs["response_format"] = response_format
 
         # Make the call
-        response = litellm.completion(**kwargs)
+        response = litellm.completion(**kwargs)  # type: ignore[union-attr]
 
         # Extract content
         content = response.choices[0].message.content or ""
@@ -155,6 +159,7 @@ class LiteLLMProvider(LLMProvider):
         tools: list[Tool],
         tool_executor: Callable[[ToolUse], ToolResult],
         max_iterations: int = 10,
+        max_tokens: int = 4096,
     ) -> LLMResponse:
         """Run a tool-use loop until the LLM produces a final response."""
         # Prepare messages with system prompt
@@ -174,7 +179,7 @@ class LiteLLMProvider(LLMProvider):
             kwargs: dict[str, Any] = {
                 "model": self.model,
                 "messages": current_messages,
-                "max_tokens": 1024,
+                "max_tokens": max_tokens,
                 "tools": openai_tools,
                 **self.extra_kwargs,
             }
@@ -184,7 +189,7 @@ class LiteLLMProvider(LLMProvider):
             if self.api_base:
                 kwargs["api_base"] = self.api_base
 
-            response = litellm.completion(**kwargs)
+            response = litellm.completion(**kwargs)  # type: ignore[union-attr]
 
             # Track tokens
             usage = response.usage

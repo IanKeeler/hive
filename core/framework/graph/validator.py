@@ -8,6 +8,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel, ValidationError
+
 logger = logging.getLogger(__name__)
 
 
@@ -100,6 +102,7 @@ class OutputValidator:
         output: dict[str, Any],
         expected_keys: list[str],
         allow_empty: bool = False,
+        nullable_keys: list[str] | None = None,
     ) -> ValidationResult:
         """
         Validate that all expected keys are present and non-empty.
@@ -108,11 +111,13 @@ class OutputValidator:
             output: The output dict to validate
             expected_keys: Keys that must be present
             allow_empty: If True, allow empty string values
+            nullable_keys: Keys that are allowed to be None
 
         Returns:
             ValidationResult with success status and any errors
         """
         errors = []
+        nullable_keys = nullable_keys or []
 
         if not isinstance(output, dict):
             return ValidationResult(
@@ -125,11 +130,77 @@ class OutputValidator:
             elif not allow_empty:
                 value = output[key]
                 if value is None:
-                    errors.append(f"Output key '{key}' is None")
+                    if key not in nullable_keys:
+                        errors.append(f"Output key '{key}' is None")
                 elif isinstance(value, str) and len(value.strip()) == 0:
                     errors.append(f"Output key '{key}' is empty string")
 
         return ValidationResult(success=len(errors) == 0, errors=errors)
+
+    def validate_with_pydantic(
+        self,
+        output: dict[str, Any],
+        model: type[BaseModel],
+    ) -> tuple[ValidationResult, BaseModel | None]:
+        """
+        Validate output against a Pydantic model.
+
+        Args:
+            output: The output dict to validate
+            model: Pydantic model class to validate against
+
+        Returns:
+            Tuple of (ValidationResult, validated_model_instance or None)
+        """
+        try:
+            validated = model.model_validate(output)
+            return ValidationResult(success=True, errors=[]), validated
+        except ValidationError as e:
+            errors = []
+            for error in e.errors():
+                field_path = ".".join(str(loc) for loc in error["loc"])
+                msg = error["msg"]
+                error_type = error["type"]
+                errors.append(f"{field_path}: {msg} (type: {error_type})")
+            return ValidationResult(success=False, errors=errors), None
+
+    def format_validation_feedback(
+        self,
+        validation_result: ValidationResult,
+        model: type[BaseModel],
+    ) -> str:
+        """
+        Format validation errors as feedback for LLM retry.
+
+        Args:
+            validation_result: The failed validation result
+            model: The Pydantic model that was used for validation
+
+        Returns:
+            Formatted feedback string to include in retry prompt
+        """
+        # Get the model's JSON schema for reference
+        schema = model.model_json_schema()
+
+        feedback = "Your previous response had validation errors:\n\n"
+        feedback += "ERRORS:\n"
+        for error in validation_result.errors:
+            feedback += f"  - {error}\n"
+
+        feedback += "\nEXPECTED SCHEMA:\n"
+        feedback += f"  Model: {model.__name__}\n"
+
+        if "properties" in schema:
+            feedback += "  Required fields:\n"
+            required = schema.get("required", [])
+            for prop_name, prop_info in schema["properties"].items():
+                req_marker = " (required)" if prop_name in required else ""
+                prop_type = prop_info.get("type", "any")
+                feedback += f"    - {prop_name}: {prop_type}{req_marker}\n"
+
+        feedback += "\nPlease fix the errors and respond with valid JSON matching the schema."
+
+        return feedback
 
     def validate_no_hallucination(
         self,
@@ -206,6 +277,7 @@ class OutputValidator:
         expected_keys: list[str] | None = None,
         schema: dict[str, Any] | None = None,
         check_hallucination: bool = True,
+        nullable_keys: list[str] | None = None,
     ) -> ValidationResult:
         """
         Run all applicable validations on output.
@@ -215,6 +287,7 @@ class OutputValidator:
             expected_keys: Optional list of required keys
             schema: Optional JSON schema
             check_hallucination: Whether to check for hallucination patterns
+            nullable_keys: Keys that are allowed to be None
 
         Returns:
             Combined ValidationResult
@@ -223,7 +296,7 @@ class OutputValidator:
 
         # Validate keys if provided
         if expected_keys:
-            result = self.validate_output_keys(output, expected_keys)
+            result = self.validate_output_keys(output, expected_keys, nullable_keys=nullable_keys)
             all_errors.extend(result.errors)
 
         # Validate schema if provided
